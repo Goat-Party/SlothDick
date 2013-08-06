@@ -1,0 +1,165 @@
+$(document).ready(function() {
+if (window.sparkles == undefined) {
+  window.sparkles = { };
+} else {
+	window.sparkles.destruct();
+	window.sparkles = { };
+}
+
+window.sparkles = $.extend(window.sparkles, {
+	autodj: true,
+	autobop: true,
+	autospeak: false,
+	autospeakMsg: 'bot dance',
+	window: {},
+	
+	ttObj: null,
+	
+	vote: function(c) {
+		var f = $.sha1(window.sparkles.ttObj.roomId + c + window.sparkles.ttObj.currentSong._id);
+		var d = $.sha1(Math.random() + "");
+		var e = $.sha1(Math.random() + "");
+		window.sparkles.socket({
+			api: "room.vote",
+			roomid: window.sparkles.ttObj.roomId,
+			section: window.sparkles.ttObj.section,
+			val: c,
+			vh: f,
+			th: d,
+			ph: e
+		});
+	},
+	
+	changeLaptop: function(laptop) {
+		window.sparkles.socket({
+			api: "user.modify",
+			laptop: laptop
+		});
+	},
+	
+	listener: function(d) {
+		if (d.command == 'newsong') {
+			if (window.sparkles.autospeak && d.room.metadata.current_dj == turntable.user.id) {
+				window.sparkles.socket({
+					api: 'room.speak',
+					roomid: window.sparkles.ttObj.roomId,
+					text: window.sparkles.autospeakMsg
+				});
+			}
+			
+			if (window.sparkles.autobop) {
+				setTimeout(window.sparkles.vote('up'), 10000);
+			}
+		}
+		
+		if (d.command == 'rem_dj') {
+			if (window.sparkles.autodj) {
+				window.sparkles.socket({
+					api: 'room.add_dj',
+					roomid: window.sparkles.ttObj.roomId
+				});
+			}
+		}
+	},
+	socket: function (c, a) {
+		if (c.api == "room.now") {
+			return;
+		}
+		c.msgid = turntable.messageId;
+		turntable.messageId += 1;
+		c.clientid = turntable.clientId;
+		if (turntable.user.id && !c.userid) {
+			c.userid = turntable.user.id;
+			c.userauth = turntable.user.auth;
+		}
+		var d = JSON.stringify(c);
+		if (turntable.socketVerbose) {
+			LOG(util.nowStr() + " Preparing message " + d);
+		}
+		var b = $.Deferred();
+		turntable.whenSocketConnected(function () {
+			if (turntable.socketVerbose) {
+				LOG(util.nowStr() + " Sending message " + c.msgid + " to " + turntable.socket.host);
+			}
+			if (turntable.socket.transport.type == "websocket") {
+				turntable.socketLog(turntable.socket.transport.sockets[0].id + ":<" + c.msgid);
+			}
+			turntable.socket.send(d);
+			turntable.socketKeepAlive(true);
+			turntable.pendingCalls.push({
+				msgid: c.msgid,
+				handler: a,
+				deferred: b,
+				time: util.now()
+			});
+		});
+		return b.promise();
+	},
+	init: function() {
+		console.log('Starting up Turntable++..');
+		window.sparkles.ttObj = window.turntable.buddyList.room;
+		if (window.sparkles.ttObj === null) {
+			alert('Could not find turntable.fm objects. You should refresh your page and try again.');
+			return;
+        }
+		
+		window.sparkles.botMessage = $('<div id="bot-message">TT For Sloths<span style="font-style: italic;"></span> <a href="#" style="text-decoration: none; color: red; font-weight: bold;">Turn off</a></div>');
+		window.sparkles.botMessage.css({
+			position: 'absolute',
+			left: '68px',
+			top: '-17px',
+			width: '100%',
+			color: 'white',
+			zIndex: '5000',
+			textAlign: 'left',
+			paddingLeft: '2px',
+			paddingTop: '2px',
+			paddingRight: '3px',
+			paddingBottom: '2px',
+			fontSize: '10px',
+			fontFace: 'Verdana'
+		});
+
+		window.sparkles.laptopSelect = $('<select onchange="window.sparkles.changeLaptop(this.value);"> <option value="pc">PC</option> <option value="mac">Mac</option> <option value="linux">Linux</option> <option value="chrome">Chromebook</option> </select>');
+		window.sparkles.laptopSelect.css({
+			position: 'absolute',
+			left: '70px',
+			top: '15px',
+			//width: '100%',
+			//color: 'white',
+			zIndex: '5001',
+			textAlign: 'left',
+			paddingLeft: '2px',
+			paddingTop: '2px',
+			paddingRight: '3px',
+			paddingBottom: '2px',
+		});
+		
+		$('.header-content').first().append(window.sparkles.botMessage);
+		$('.header-content').first().append(window.sparkles.laptopSelect);
+		
+		window.sparkles.botMessage.find('a').click(function(e) {
+			e.preventDefault();
+			window.sparkles.destruct();
+		});
+		
+		//window.sparkles.buttons.autoDJ = $('<a href="#" style="text-decoration: none; color: red; font-weight: bold;">Turn off</a>');
+		
+		console.log('Setting up laptop..');
+		var laptops = [ 'chrome', 'mac' ]
+		window.sparkles.vote('up');
+		window.sparkles.changeLaptop(laptops[Math.floor(Math.random() * laptops.length)]);
+		turntable.addEventListener("message", window.sparkles.listener);
+		console.log('Setup Finished!');
+	},
+	destruct: function() {
+		console.log('Turning off TT++.');
+		window.sparkles.botMessage.remove();
+		window.sparkles.laptopSelect.remove();
+		window.turntable.removeEventListener("message", window.sparkles.listener);
+		window.sparkles = null;
+	}
+});
+
+window.sparkles.init();
+});
